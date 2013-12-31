@@ -50,3 +50,5 @@ sudo -u hdfs python merge.py  -d lecai_ad -t ext_ad_show -p entry_date -P '2013-
 # Merge files in a partition(entry_date='2013-12-29', type='1'), lz4 compressed
 sudo -u hdfs python merge.py  -d lecai_ad -t ext_ad_show -p entry_date -P '2013-12-29' -p type -P 1 -c -C lz4
 </pre>
+
+\#EOF

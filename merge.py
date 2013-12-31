@@ -5,11 +5,13 @@ import sys
 import os
 import tempfile
 
-MERGE_TEMP_DATABASE="temp_merge_db"
-MERGE_TEMP_TABLE_PREFIX="temp_"
+MERGE_TEMP_DATABASE = "temp_merge_db"
+MERGE_TEMP_TABLE_PREFIX = "temp_"
+
 
 def sskaje():
     print "\nHive Merge v0.1 \n  Author: sskaje (https://sskaje.me/)\n"
+
 
 def usage(error=""):
     """ Usage """
@@ -34,7 +36,15 @@ def usage(error=""):
     sys.exit(255)
 
 
-def hiveOptions(config):
+def debug(hiveql):
+    """ Debug """
+    print "====================== DEBUG: HiveQL ======================"
+    print hiveql
+    print "====================== DEBUG: HiveQL ======================\n"
+    sys.exit(0)
+
+
+def hive_options(config):
     """ Default options """
     ret = ''
     ret += """
@@ -45,7 +55,7 @@ SET hive.exec.max.dynamic.partitions=100000;
 SET hive.exec.max.created.files=1000000;
 
 """
-    if config.has_key("merge_size") and config["merge_size"].isdigit() and int(config["merge_size"]) > 16*1024*1024:
+    if "merge_size" in config and config["merge_size"].isdigit() and int(config["merge_size"]) > 16*1024*1024:
         ret += "SET hive.merge.size.per.task="+config["merge_size"]+";"
     else:
         ret += "SET hive.merge.size.per.task=256000000;"
@@ -56,9 +66,19 @@ SET hive.merge.mapredfiles=true;
 SET hive.merge.smallfiles.avgsize=16000000;
 
 """
+
+    # Hive compression
+    if "compress" in config and config["compress"]:
+        print "Compression enabled"
+        compress_codec = ""
+        if "compress_codec" in config:
+            compress_codec = config["compress_codec"]
+        ret += hive_enable_compression(compress_codec) + "\n"
+
     return ret
 
-def hiveCompressCodec(codec):
+
+def hive_compress_codec(codec):
     """ Get hive compression codec """
     if codec == "lz4":
         return "org.apache.hadoop.io.compress.Lz4Codec"
@@ -75,9 +95,11 @@ def hiveCompressCodec(codec):
     else:
         usage("Invalid compression codec")
 
-def hiveEnableCompress(codec):
+
+def hive_enable_compression(codec):
     """ Hive enable compression """
-    codec = hiveCompressCodec(codec)
+    codec = hive_compress_codec(codec)
+    print "Compression codec=" + codec
     ret = ""
     ret += "SET mapred.output.compress=true;\n"
     ret += "SET mapred.output.compression.type=BLOCK;\n"
@@ -86,11 +108,13 @@ def hiveEnableCompress(codec):
 
     return ret
 
-def hiveGetTempDB():
+
+def hive_get_temp_db():
     """ Return temporary database name """
     return MERGE_TEMP_DATABASE
 
-def hiveGetTempTable(database, table):
+
+def hive_get_temp_table(database, table):
     """ Return temporary table name """
     ret = MERGE_TEMP_TABLE_PREFIX
     ret += database
@@ -98,31 +122,26 @@ def hiveGetTempTable(database, table):
     ret += table
     return ret
 
+
 def run_command(command):
     """ Execute command """
     f = os.popen(command)
     for i in f.readlines():
         print i
 
-def mktemp(hive):
+
+def mktemp(hiveql):
     """ Create temporary file """
     fd, temp_path = tempfile.mkstemp(".hive", "hivemerge_", "/tmp")
-    file = open(temp_path, 'w')
-    file.write(hive)
-    file.close()
+    f = open(temp_path, 'w')
+    f.write(hiveql)
+    f.close()
     os.close(fd)
     return temp_path
 
-def Debug(hive):
-    """ Debug """
-    print "====================== DEBUG: HiveQL ======================"
-    print hive
-    print "====================== DEBUG: HiveQL ======================\n"
-    sys.exit(0)
-
 
 def main():
-    sskaje();
+    sskaje()
     try:
         short_opts = "hDcC:d:t:p:P:S:"
         long_opts = [
@@ -142,30 +161,27 @@ def main():
         usage(err.msg)
         sys.exit(2)
 
-    debug = False
+    debug_mode = False
 
-    compress = False
-    compressCodec = ""
+    config = {}
 
     database = ""
     table = ""
 
     partition_keys = []
     partition_values = []
-    config = {}
 
+    # Process options
     for o, a in opts:
-        if o == "-v":
-            verbose = True
-        elif o in ("-h", "--help"):
+        if o in ("-h", "--help"):
             usage()
             sys.exit()
         elif o in ("-D", "--debug"):
-            debug = True
+            debug_mode = True
         elif o in ("-c", "--compress"):
-            compress = True
+            config["compress"] = True
         elif o in ("-C", "--compress-codec"):
-            compressCodec = a
+            config["compress_codec"] = a
         elif o in ("-d", "--database"):
             database = a
         elif o in ("-t", "--table"):
@@ -180,84 +196,82 @@ def main():
     if database == "" or table == "":
         usage("database and table are required.")
 
-    hive = ""
-    hive += hiveOptions(config)
-    if compress:
-        hive += hiveEnableCompress(compressCodec) + "\n"
+    hiveql = ""
+    # Hive configurations
+    hiveql += hive_options(config)
 
-
-    # get table fields
+    # Build partition statements
     has_partition = False
-    if (partition_keys != []):
+    partition_in_where = ""
+    partition_key_list = ""
+    partition_key_string = ""
+
+    if len(partition_keys):
         has_partition = True
-        partitionKeyList = ', '.join(partition_keys)
-        partitionPairs = []
+        partition_key_list = ', '.join(partition_keys)
+        partition_pairs = []
         for i in range(len(partition_keys)):
             try:
-                partitionPairs.append(partition_keys[i] + "='" + partition_values[i] + "'")
+                partition_pairs.append(partition_keys[i] + "='" + partition_values[i] + "'")
             except IndexError:
                 usage("Missing value for partition key '" + partition_keys[i] + "'")
 
-        partitionInWhere = ' AND '.join(partitionPairs)
-        partitionKeyString = ', '.join(partitionPairs)
-
+        partition_in_where = ' AND '.join(partition_pairs)
+        partition_key_string = ', '.join(partition_pairs)
 
     # Create tmp database & table
-    temp_table = hiveGetTempTable(database, table)
-    temp_db = hiveGetTempDB()
+    temp_table = hive_get_temp_table(database, table)
+    temp_db = hive_get_temp_db()
     temp_table_full = temp_db + "." + temp_table
     original_table_full = database + "." + table
-    hive += "CREATE DATABASE IF NOT EXISTS " + temp_db + ";\n"
-    hive += "CREATE TABLE IF NOT EXISTS " + temp_table_full + " LIKE " + original_table_full + ";\n\n"
+    hiveql += "CREATE DATABASE IF NOT EXISTS " + temp_db + ";\n"
+    hiveql += "CREATE TABLE IF NOT EXISTS " + temp_table_full + " LIKE " + original_table_full + ";\n\n"
 
-    # insert
-    hive += "SET hive.exec.compress.output=false;\n"
-    hive += "INSERT OVERWRITE TABLE " + temp_table_full
+    # Insert to temporary table
+    hiveql += "SET hive.exec.compress.output=false;\n"
+    hiveql += "INSERT OVERWRITE TABLE " + temp_table_full
     if has_partition:
-        hive += " PARTITION("+partitionKeyList+")"
-    hive += " SELECT * FROM " + original_table_full
+        hiveql += " PARTITION("+partition_key_list+")"
+    hiveql += " SELECT * FROM " + original_table_full
     if has_partition:
-        hive += " WHERE " + partitionInWhere + ";\n\n"
+        hiveql += " WHERE " + partition_in_where + ";\n\n"
     else:
-        hive += ";\n\n"
+        hiveql += ";\n\n"
 
-    # insert back
-    hive += "SET hive.exec.compress.output=true;\n"
-    hive += "INSERT OVERWRITE TABLE " + original_table_full
+    # Insert back from temporary table
+    hiveql += "SET hive.exec.compress.output=true;\n"
+    hiveql += "INSERT OVERWRITE TABLE " + original_table_full
     if has_partition:
-        hive += " PARTITION("+partitionKeyList+")"
-    hive += " SELECT * FROM " + temp_table_full
+        hiveql += " PARTITION("+partition_key_list+")"
+    hiveql += " SELECT * FROM " + temp_table_full
     if has_partition:
-        hive += " WHERE " + partitionInWhere + ";\n\n"
+        hiveql += " WHERE " + partition_in_where + ";\n\n"
     else:
-        hive += ";\n\n"
+        hiveql += ";\n\n"
 
-    # clean table/partition
-    hive += "USE " + temp_db + ";\n"
+    # Clean table/partition
+    hiveql += "USE " + temp_db + ";\n"
     if has_partition:
-        hive += "ALTER TABLE " + temp_table + " DROP PARTITION(" + partitionKeyString + ");\n"
+        hiveql += "ALTER TABLE " + temp_table + " DROP PARTITION(" + partition_key_string + ");\n"
     else:
-        hive += "DROP TABLE " + temp_table + ";\n"
+        hiveql += "DROP TABLE " + temp_table + ";\n"
 
     # Debug only
-    if debug:
-        Debug(hive)
-
+    if debug_mode:
+        debug(hiveql)
 
     # Create temporary file
-    temp_path = mktemp(hive)
+    temp_path = mktemp(hiveql)
     print "File written: " + temp_path + "\n"
 
-    # execute
+    # Execute command
     command = "hive -f " + temp_path
     print "Executing command: " + command
     run_command(command)
 
-    # clean
+    # Clean temporary file
     os.remove(temp_path)
     print "File removed: " + temp_path + "\n"
-
-
 
 if __name__ == "__main__":
     main()
