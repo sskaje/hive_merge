@@ -1,9 +1,11 @@
-hive_merge
+Merge small files on HDFS for Hive table
 ==========
 
-Merge Small files for Hive Table on HDFS
+Solving small files problems on HDFS for Hive table.
 
 Author: sskaje ([http://sskaje.me/](http://sskaje.me/))
+
+More on my blog: [https://sskaje.me/2013/12/project-merging-small-files-hdfs-hive-table/](https://sskaje.me/2013/12/project-merging-small-files-hdfs-hive-table/)
 
 
 ## Usage

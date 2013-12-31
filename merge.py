@@ -43,17 +43,17 @@ SET hive.exec.dynamic.partition.mode=nonstrict;
 SET hive.exec.max.dynamic.partitions.pernode=10000;
 SET hive.exec.max.dynamic.partitions=100000;
 SET hive.exec.max.created.files=1000000;
+
 """
     if config.has_key("merge_size") and config["merge_size"].isdigit() and int(config["merge_size"]) > 16*1024*1024:
-        ret += "SET hive.merge.size.per.task="+config["merge_size"]+";\n"
+        ret += "SET hive.merge.size.per.task="+config["merge_size"]+";"
     else:
-        ret += "SET hive.merge.size.per.task=256000000;\n"
+        ret += "SET hive.merge.size.per.task=256000000;"
 
     ret += """
 SET hive.merge.mapfiles=true;
 SET hive.merge.mapredfiles=true;
 SET hive.merge.smallfiles.avgsize=16000000;
-
 
 """
     return ret
@@ -113,7 +113,7 @@ def mktemp(hive):
     os.close(fd)
     return temp_path
 
-def debug(hive):
+def Debug(hive):
     """ Debug """
     print "====================== DEBUG: HiveQL ======================"
     print hive
@@ -241,7 +241,7 @@ def main():
 
     # Debug only
     if debug:
-        debug(hive)
+        Debug(hive)
 
 
     # Create temporary file
