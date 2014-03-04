@@ -122,7 +122,7 @@ def hive_get_temp_table(database, table):
     ret += "_"
     ret += table
     ret += "_"
-    ret += random.randrange(100,999)
+    ret += str(random.randrange(100,999))
     return ret
 
 
