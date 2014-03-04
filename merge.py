@@ -4,6 +4,7 @@ import getopt
 import sys
 import os
 import tempfile
+import random
 
 MERGE_TEMP_DATABASE = "temp_merge_db"
 MERGE_TEMP_TABLE_PREFIX = "temp_"
@@ -120,6 +121,8 @@ def hive_get_temp_table(database, table):
     ret += database
     ret += "_"
     ret += table
+    ret += "_"
+    ret += random.randrange(100,999)
     return ret
 
 
@@ -251,7 +254,7 @@ def main():
 
     # Clean table/partition
     hiveql += "USE " + temp_db + ";\n"
-    if has_partition:
+    if has_partition and 0:
         hiveql += "ALTER TABLE " + temp_table + " DROP PARTITION(" + partition_key_string + ");\n"
     else:
         hiveql += "DROP TABLE " + temp_table + ";\n"
